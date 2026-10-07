@@ -2,15 +2,23 @@ local M={}
 local json=require 'luci.jsonc'
 local fs=require 'nixio.fs'
 local reducer=dofile('/usr/share/campus-guard/metrics.lua')
-local root='/mnt/nvme0n1-4/Configs/campus-guard'
+local DEFAULT_DIR='/tmp/campus-guard/data'
 local tmp='/tmp/campus-guard/metrics-error'
 local function save(path,value)
   assert(fs.writefile(path..'.new',value)); assert(fs.chmod(path..'.new','600')); assert(fs.rename(path..'.new',path))
 end
+function M.data_dir()
+  local dir=require('luci.model.uci').cursor():get('campus_guard','main','data_dir') or ''
+  if not dir:match('^/[%w_./%-]+$') or dir:find('..',1,true) then dir=DEFAULT_DIR end
+  return (dir:gsub('/+$',''))
+end
 function M.collect(auth,state,wan)
   -- 依附原检测循环，不另发认证请求；至少间隔 60 秒采样。
-  if not fs.access('/mnt/nvme0n1-4/Configs') then
-    fs.writefile(tmp,'NVMe 统计目录不可用，暂未保存流量数据'); return
+  local root=M.data_dir()
+  -- 只在上级目录已存在时写入，避免硬盘未挂载时把数据写进系统闪存。
+  local parent=root:match('^(.+)/[^/]+$') or '/'
+  if not fs.access(parent) then
+    fs.writefile(tmp,'统计目录不可用（上级目录不存在），暂未保存流量数据'); return
   end
   fs.mkdir(root,'700'); fs.chmod(root,'700')
   local path=root..'/stats.json'

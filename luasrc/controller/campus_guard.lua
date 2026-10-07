@@ -4,6 +4,7 @@ function index()
     entry({'admin','services','campus_guard','status'}, call('status')).leaf=true
     entry({'admin','services','campus_guard','statistics'}, call('statistics')).leaf=true
     entry({'admin','services','campus_guard','export'}, call('export')).leaf=true
+    entry({'admin','services','campus_guard','check'}, post('check')).leaf=true
 end
 local function valid_date(value)
     if not value or not value:match('^%d%d%d%d%-%d%d%-%d%d$') then return nil end
@@ -11,10 +12,16 @@ local function valid_date(value)
     local epoch=os.time({year=tonumber(y),month=tonumber(m),day=tonumber(d),hour=12})
     return epoch and os.date('%Y-%m-%d',epoch)==value and value or nil
 end
+local function load_store()
+    local fs=require 'nixio.fs'
+    local j=require 'luci.jsonc'
+    local dir=dofile('/usr/share/campus-guard/collect-metrics.lua').data_dir()
+    return j.parse(fs.readfile(dir..'/stats.json') or '')
+end
 function statistics()
     local fs=require 'nixio.fs'
     local j=require 'luci.jsonc'
-    local store=j.parse(fs.readfile('/mnt/nvme0n1-4/Configs/campus-guard/stats.json') or '')
+    local store=load_store()
     local metrics=dofile('/usr/share/campus-guard/metrics.lua')
     local date=valid_date(luci.http.formvalue('date'))
     local result=metrics.view(store,date)
@@ -23,9 +30,7 @@ function statistics()
     luci.http.write(j.stringify(result))
 end
 function export()
-    local fs=require 'nixio.fs'
-    local j=require 'luci.jsonc'
-    local store=j.parse(fs.readfile('/mnt/nvme0n1-4/Configs/campus-guard/stats.json') or '')
+    local store=load_store()
     local metrics=dofile('/usr/share/campus-guard/metrics.lua')
     local date=valid_date(luci.http.formvalue('date')) or os.date('%Y-%m-%d')
     local result=metrics.view(store,date)
@@ -47,4 +52,9 @@ function status()
     s.history=j.parse(fs.readfile('/tmp/campus-guard/history.json') or '') or {}
     luci.http.prepare_content('application/json')
     luci.http.write(j.stringify(s))
+end
+function check()
+    luci.sys.call('/usr/bin/lua /usr/share/campus-guard/campus-guard.lua >/dev/null 2>&1 &')
+    luci.http.prepare_content('application/json')
+    luci.http.write('{"started":true}')
 end

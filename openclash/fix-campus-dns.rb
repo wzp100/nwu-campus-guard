@@ -1,4 +1,6 @@
 require 'yaml'
+# 校园域名交给主路由解析；主路由地址可用环境变量 CAMPUS_DNS 覆盖。
+CAMPUS_DNS = ENV.fetch('CAMPUS_DNS', '192.168.1.1')
 
 runtime = '/etc/openclash/roomrouter.yaml'
 source = '/etc/openclash/config/roomrouter.yaml'
@@ -16,7 +18,7 @@ def patch_config(path)
   dns = c['dns'] ||= {}
   raise 'Unsupported fake-ip-filter mode' unless [nil, 'blacklist'].include?(dns['fake-ip-filter-mode'])
   dns['fake-ip-filter'] = (Array(dns['fake-ip-filter']) + ['+.nwu.edu.cn']).uniq
-  dns['nameserver-policy'] = {'+.nwu.edu.cn' => ['192.168.1.1']} .merge((dns['nameserver-policy'] || {}).reject { |k, v| k == '+.nwu.edu.cn' })
+  dns['nameserver-policy'] = {'+.nwu.edu.cn' => [CAMPUS_DNS]} .merge((dns['nameserver-policy'] || {}).reject { |k, v| k == '+.nwu.edu.cn' })
   (c['hosts'] ||= {})['calogin.nwu.edu.cn'] = '172.30.9.18'
   dns['direct-nameserver-follow-policy'] = true
   c['rules'] = (['DOMAIN-SUFFIX,nwu.edu.cn,DIRECT', 'IP-CIDR,172.30.9.18/32,DIRECT,no-resolve', 'IP-CIDR,10.10.10.10/32,DIRECT,no-resolve', 'IP-CIDR,10.8.8.8/32,DIRECT,no-resolve'] + Array(c['rules'])).uniq

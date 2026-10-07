@@ -9,7 +9,9 @@ import sys
 import urllib.parse
 
 sys.stdout.reconfigure(encoding='utf-8')
+# 用法：python test-campus-wifi.py <本机校园 Wi-Fi 地址> [root@路由器地址]
 source_ip=sys.argv[1]
+router=sys.argv[2] if len(sys.argv)>2 else 'root@192.168.1.1'
 host='calogin.nwu.edu.cn'
 context=ssl.create_default_context()
 def get(path,port=443):
@@ -50,7 +52,7 @@ data=(config or {}).get('data',{})
 if str(data.get('login_method'))!='1' or str(data.get('account_prefix','0'))!='0':
     raise RuntimeError('认证规则与预期不一致，未提交账号密码')
 remote='lua -e \'local u=require("luci.model.uci").cursor(); local j=require("luci.jsonc"); print(j.stringify({username=u:get("campus_guard","main","username"),password=u:get("campus_guard","main","password"),suffix=u:get("campus_guard","main","suffix")}))\''
-result=subprocess.run(['ssh','-o','BatchMode=yes','-o','ConnectTimeout=5','root@192.168.1.1',remote],check=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+result=subprocess.run(['ssh','-o','BatchMode=yes','-o','ConnectTimeout=5',router,remote],check=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
 credential=json.loads(result.stdout)
 if not credential.get('username') or not credential.get('password'): raise RuntimeError('未保存校园网凭据')
 suffix=credential.get('suffix') or ''

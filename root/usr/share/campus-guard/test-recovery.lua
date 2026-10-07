@@ -7,7 +7,10 @@ local nixio=require 'nixio'
 local uci=require 'luci.model.uci'.cursor()
 local mode=arg[1]
 assert(mode=='--dry-run' or mode=='--run' or mode=='--rescue','请指定 --dry-run、--run 或 --rescue')
-local root='/mnt/nvme0n1-4/Configs/campus-guard/tests'
+local data_dir=uci:get('campus_guard','main','data_dir') or '/tmp/campus-guard/data'
+assert(data_dir:match('^/[%w_./%-]+$') and not data_dir:find('..',1,true),'统计目录配置无效')
+local root=data_dir..'/tests'
+fs.mkdir(data_dir,'700')
 fs.mkdir(root,'700'); fs.chmod(root,'700')
 local pid=tostring(nixio.getpid())
 local report={started_at=os.date('%Y-%m-%d %H:%M:%S'),epoch=os.time(),mode=mode,events={}}

@@ -33,7 +33,9 @@ lua /usr/share/campus-guard/test-recovery.lua --dry-run
 
 ```sh
 umask 077
-setsid /bin/sh /usr/share/campus-guard/test-recovery.sh > /mnt/nvme0n1-4/Configs/campus-guard/tests/test-run.log 2>&1 < /dev/null &
+DATA=$(uci -q get campus_guard.main.data_dir || echo /tmp/campus-guard/data)
+mkdir -p "$DATA/tests"
+setsid /bin/sh /usr/share/campus-guard/test-recovery.sh > "$DATA/tests/test-run.log" 2>&1 < /dev/null &
 ```
 
 脚本先检查当前认证、外网、已保存账号、守护进程和自动登录开关，再预置独立备用恢复进程，最后执行退出。正常守护最多观察 120 秒，超时则尝试备用认证；独立备用进程从启动后 180 秒开始检查。脚本使用路由器上已保存的账号密码，无需把密码写进测试文件，也不会把密码输出到报告。不会关闭 WAN 或重启路由器。
@@ -41,10 +43,10 @@ setsid /bin/sh /usr/share/campus-guard/test-recovery.sh > /mnt/nvme0n1-4/Configs
 记录位置：
 
 ```text
-/mnt/nvme0n1-4/Configs/campus-guard/tests/test-run.log
-/mnt/nvme0n1-4/Configs/campus-guard/tests/latest.json
-/mnt/nvme0n1-4/Configs/campus-guard/tests/latest-rescue.json
-/mnt/nvme0n1-4/Configs/campus-guard/tests/test-日期时间-进程号.json
+<data_dir>/tests/test-run.log
+<data_dir>/tests/latest.json
+<data_dir>/tests/latest-rescue.json
+<data_dir>/tests/test-日期时间-进程号.json
 ```
 
 结果 `guard_recovery_pass` 才表示观察到退出且正常守护自动恢复。`guard_failed_rescue_succeeded` 表示备用恢复成功、正常守护未通过；`logout_not_observed` 表示没有观察到退出，不能当作成功。

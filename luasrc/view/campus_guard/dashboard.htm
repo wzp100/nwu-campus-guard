@@ -1,0 +1,327 @@
+<%
+local dsp=require 'luci.dispatcher'
+local api_status=dsp.build_url('admin','services','campus_guard','status')
+local api_check=dsp.build_url('admin','services','campus_guard','check')
+local api_stats=dsp.build_url('admin','services','campus_guard','statistics')
+local api_export=dsp.build_url('admin','services','campus_guard','export')
+-%>
+<style>
+#cg{--cg-accent:var(--primary,#5e72e4);--cg-ok:#2dce89;--cg-warn:#fb8c00;--cg-bad:#f5365c;--cg-idle:#8898aa;--cg-line:rgba(136,152,170,.28);--cg-tile:rgba(136,152,170,.09);--cg-muted:.68}
+#cg,#cg *{box-sizing:border-box}
+#cg .cg-card{margin-bottom:1.25rem}
+#cg .cg-body{padding:0 1.25rem 1.25rem}
+#cg .cg-body>*+*{margin-top:1rem}
+#cg .cg-muted{opacity:var(--cg-muted)}
+#cg .cg-num{font-variant-numeric:tabular-nums}
+
+/* 状态横幅 */
+#cg .cg-banner{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 16px;padding:1.25rem}
+#cg .cg-state{display:flex;align-items:center;gap:14px;min-width:0}
+#cg .cg-dot{flex:none;width:12px;height:12px;border-radius:50%;background:var(--cg-tone);box-shadow:0 0 0 5px color-mix(in srgb,var(--cg-tone) 18%,transparent)}
+#cg [data-tone]{--cg-tone:var(--cg-idle)}
+#cg [data-tone=ok]{--cg-tone:var(--cg-ok)}
+#cg [data-tone=warn]{--cg-tone:var(--cg-warn)}
+#cg [data-tone=bad]{--cg-tone:var(--cg-bad)}
+#cg .cg-title{font-size:1.15rem;font-weight:600;line-height:1.4}
+#cg .cg-sub{font-size:.8rem;line-height:1.5;margin-top:2px}
+#cg .cg-actions{display:flex;gap:8px;flex-wrap:wrap}
+#cg .cg-actions .cbi-button{margin:0;text-decoration:none}
+#cg .cg-actions .cg-ghost{color:var(--cg-accent);background:transparent;border:1px solid var(--cg-accent)}
+#cg .cg-actions .cg-ghost:hover{color:#fff;background:var(--cg-accent)}
+
+/* 信息格 */
+#cg .cg-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+#cg .cg-tile{padding:14px 16px;background:var(--cg-tile);border-radius:8px;min-width:0}
+#cg .cg-label{font-size:.75rem;line-height:1.4;opacity:var(--cg-muted)}
+#cg .cg-value{margin-top:6px;font-size:1rem;font-weight:600;line-height:1.4;overflow-wrap:anywhere}
+#cg .cg-value[data-tone]:not([data-tone=idle]){color:var(--cg-tone)}
+#cg .cg-kpi .cg-value{font-size:1.5rem;line-height:1.25;font-weight:600}
+#cg .cg-kpi .cg-unit{font-size:.85rem;font-weight:500;margin-left:4px;opacity:var(--cg-muted)}
+#cg .cg-hint{margin-top:4px;font-size:.75rem;line-height:1.4;opacity:var(--cg-muted)}
+
+/* 历史与明细 */
+#cg details{border-top:1px solid var(--cg-line);padding-top:.75rem}
+#cg summary{cursor:pointer;font-size:.85rem;font-weight:600;padding:2px 0;user-select:none}
+#cg .cg-history{list-style:none;margin:.5rem 0 0;padding:0;max-height:260px;overflow:auto}
+#cg .cg-history li{display:grid;grid-template-columns:150px 10px minmax(0,1fr);align-items:center;gap:10px;padding:7px 0;font-size:.8rem;line-height:1.5;border-bottom:1px dashed var(--cg-line)}
+#cg .cg-history li:last-child{border-bottom:0}
+#cg .cg-history .cg-dot{width:8px;height:8px;box-shadow:none}
+
+/* 工具栏 */
+#cg .cg-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px}
+#cg .cg-toolbar .cg-spacer{flex:1}
+#cg .cg-toolbar select,#cg .cg-toolbar input{height:34px;margin:0;padding:0 10px;font-size:.8rem;line-height:32px;color:inherit;background-color:transparent;border:1px solid var(--cg-line);border-radius:6px;min-width:0;width:auto}
+#cg .cg-toolbar select option{color:#32325d}
+#cg .cg-toolbar .cbi-button{margin:0;height:34px;line-height:1}
+#cg .cg-seg{display:inline-flex;padding:3px;border-radius:8px;background:var(--cg-tile)}
+#cg .cg-seg button{height:28px;margin:0;padding:0 14px;font-size:.8rem;line-height:28px;color:inherit;background:transparent;border:0;border-radius:6px;box-shadow:none;cursor:pointer;opacity:.75}
+#cg .cg-seg button[aria-pressed=true]{background:var(--cg-accent);color:#fff;opacity:1}
+#cg .cg-link{font-size:.8rem;color:var(--cg-accent);text-decoration:none;white-space:nowrap}
+#cg .cg-link:hover{text-decoration:underline}
+
+/* 图表 */
+#cg .cg-charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:16px}
+#cg .cg-chart{position:relative;min-width:0;padding:14px 16px 8px;border:1px solid var(--cg-line);border-radius:8px}
+#cg .cg-chart-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 12px;margin-bottom:6px}
+#cg .cg-chart-title{font-size:.9rem;font-weight:600}
+#cg .cg-chart-title small{margin-left:6px;font-size:.72rem;font-weight:400;opacity:var(--cg-muted)}
+#cg .cg-legend{display:flex;gap:12px;font-size:.72rem;opacity:var(--cg-muted)}
+#cg .cg-legend i{display:inline-block;width:10px;height:10px;margin-right:4px;vertical-align:-1px;border-radius:2px;background:var(--cg-accent)}
+#cg .cg-legend i.cg-miss{height:0;border-top:2px dashed var(--cg-idle);border-radius:0;background:none;vertical-align:3px}
+#cg .cg-svg{display:block;width:100%;height:auto;overflow:visible}
+#cg .cg-svg text{fill:currentColor;font-size:11px;opacity:.6}
+#cg .cg-svg .cg-bar{fill:var(--cg-accent)}
+#cg .cg-svg .cg-col:hover .cg-band,#cg .cg-svg .cg-col:focus .cg-band{fill:rgba(136,152,170,.14)}
+#cg .cg-svg .cg-col:focus{outline:none}
+#cg .cg-tip{position:absolute;z-index:5;pointer-events:none;min-width:150px;padding:8px 10px;font-size:.75rem;line-height:1.55;white-space:pre-line;color:#fff;background:rgba(30,41,59,.94);border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.18)}
+#cg .cg-tip b{display:block;margin-bottom:2px}
+#cg .cg-note{font-size:.75rem;line-height:1.65;opacity:var(--cg-muted)}
+#cg .cg-alert{padding:10px 12px;font-size:.8rem;border-radius:6px;background:color-mix(in srgb,var(--cg-warn) 12%,transparent)}
+
+#cg .cg-table-wrap{max-height:340px;overflow:auto;margin-top:.5rem}
+#cg .cg-table{width:100%;border-collapse:collapse;font-size:.8rem}
+#cg .cg-table th,#cg .cg-table td{padding:7px 10px;text-align:right;white-space:nowrap;border:0;border-bottom:1px solid var(--cg-line);background:none;line-height:1.4}
+#cg .cg-table th{position:sticky;top:0;font-weight:600;background:var(--cg-sticky,#fff)}
+#cg .cg-table th:first-child,#cg .cg-table td:first-child{text-align:left}
+@media (prefers-color-scheme:dark){#cg{--cg-sticky:#1e1e1e}}
+
+@media (max-width:900px){#cg .cg-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:520px){
+  #cg .cg-body,#cg .cg-banner{padding-left:1rem;padding-right:1rem}
+  #cg .cg-kpi .cg-value{font-size:1.2rem}
+  #cg .cg-history li{grid-template-columns:10px minmax(0,1fr)}
+  #cg .cg-history li time{grid-column:1/-1}
+  #cg .cg-toolbar .cg-spacer{display:none}
+}
+</style>
+
+<div id="cg">
+  <div class="cbi-section cg-card">
+    <div class="cg-banner">
+      <div class="cg-state" id="cg-state" data-tone="idle">
+        <span class="cg-dot" aria-hidden="true"></span>
+        <div>
+          <div class="cg-title" id="cg-message">正在读取检测结果…</div>
+          <div class="cg-sub cg-muted" id="cg-checked">每 20 秒自动检测一次</div>
+        </div>
+      </div>
+      <div class="cg-actions">
+        <button type="button" class="cbi-button cbi-button-apply" id="cg-check">立即检测</button>
+        <a class="cbi-button cg-ghost" href="https://calogin.nwu.edu.cn/a79.htm" target="_blank" rel="noopener">认证页面</a>
+      </div>
+    </div>
+    <div class="cg-body">
+      <div class="cg-grid">
+        <div class="cg-tile"><div class="cg-label">WAN 地址</div><div class="cg-value cg-num" id="cg-wan">—</div><div class="cg-hint" id="cg-wan-dev">&nbsp;</div></div>
+        <div class="cg-tile"><div class="cg-label">外网探测</div><div class="cg-value" id="cg-probe">—</div><div class="cg-hint" id="cg-probe-sub">&nbsp;</div></div>
+        <div class="cg-tile"><div class="cg-label">校园网认证</div><div class="cg-value" id="cg-auth">—</div><div class="cg-hint" id="cg-auth-sub">&nbsp;</div></div>
+        <div class="cg-tile"><div class="cg-label">自动登录</div><div class="cg-value" id="cg-auto">—</div><div class="cg-hint" id="cg-auto-sub">&nbsp;</div></div>
+      </div>
+      <details>
+        <summary>最近状态变化 <span class="cg-muted" id="cg-history-count"></span></summary>
+        <ol class="cg-history" id="cg-history"></ol>
+      </details>
+    </div>
+  </div>
+
+  <div class="cbi-section cg-card">
+    <h3>用量统计</h3>
+    <div class="cg-body">
+      <div class="cg-sub cg-muted" id="cg-collection">正在读取采样数据…</div>
+      <div class="cg-alert" id="cg-error" hidden></div>
+      <div class="cg-grid">
+        <div class="cg-tile cg-kpi"><div class="cg-label">今日流量</div><div class="cg-value cg-num" id="cg-today-flow">—</div></div>
+        <div class="cg-tile cg-kpi"><div class="cg-label">今日在线时长</div><div class="cg-value cg-num" id="cg-today-time">—</div></div>
+        <div class="cg-tile cg-kpi"><div class="cg-label">账号累计流量</div><div class="cg-value cg-num" id="cg-total-flow">—</div></div>
+        <div class="cg-tile cg-kpi"><div class="cg-label">账号累计时长</div><div class="cg-value cg-num" id="cg-total-time">—</div></div>
+      </div>
+      <div class="cg-toolbar">
+        <div class="cg-seg" role="group" aria-label="显示指标">
+          <button type="button" data-metric="bytes" aria-pressed="true">流量</button>
+          <button type="button" data-metric="minutes" aria-pressed="false">在线时长</button>
+        </div>
+        <select id="cg-range" aria-label="每日范围"><option value="7">最近 7 天</option><option value="30">最近 30 天</option><option value="90">最近 90 天</option></select>
+        <input id="cg-date" type="date" aria-label="小时图日期">
+        <span class="cg-spacer"></span>
+        <a class="cg-link" id="cg-export-hourly" href="#">导出小时 CSV</a>
+        <a class="cg-link" id="cg-export-daily" href="#">导出每日 CSV</a>
+      </div>
+      <div class="cg-charts">
+        <div class="cg-chart" id="cg-daily"></div>
+        <div class="cg-chart" id="cg-hourly"></div>
+      </div>
+      <div class="cg-note" id="cg-quality"></div>
+      <details>
+        <summary>所选日期的小时明细</summary>
+        <div class="cg-table-wrap"><table class="cg-table"><thead><tr><th>小时</th><th>流量 (MiB)</th><th>在线时长 (分钟)</th><th>有效采集</th><th>采样次数</th></tr></thead><tbody id="cg-hourly-table"></tbody></table></div>
+      </details>
+      <div class="cg-note">小时值由相邻累计读数差分，跨整点按采样间隔分摊，属于估算；虚线表示该时段未采集，不计为零。数据取自校园网账号接口，可能包含同账号的其他设备。</div>
+    </div>
+  </div>
+</div>
+
+<script type="text/javascript">
+(function(){
+  'use strict';
+  var API={status:'<%=api_status%>',check:'<%=api_check%>',stats:'<%=api_stats%>',exp:'<%=api_export%>'};
+  var TOKEN='<%=token%>';
+  var TONE={online:'ok',reconnected:'ok',wan_down:'bad',login_failed:'bad',internal_error:'bad'};
+  var metric='bytes',stats=null,dateInit=false,busy=false;
+  function $(id){return document.getElementById(id)}
+  function set(id,text,tone){var n=$(id);n.textContent=text;if(tone!==undefined)n.setAttribute('data-tone',tone)}
+  function fmt(n,d){return Number(n||0).toLocaleString('zh-CN',{minimumFractionDigits:d,maximumFractionDigits:d})}
+  function flowParts(b){b=b||0;return b>=1073741824?[fmt(b/1073741824,2),'GiB']:[fmt(b/1048576,b>=10485760?1:2),'MiB']}
+  function timeParts(m){m=m||0;return m>=60?[fmt(m/60,1),'小时']:[fmt(m,0),'分钟']}
+  function flowText(b){return flowParts(b).join(' ')}
+  function timeText(m){return timeParts(m).join(' ')}
+  function span(s){s=Math.max(0,Math.floor(s||0));if(s>=86400)return Math.floor(s/86400)+' 天 '+Math.floor(s%86400/3600)+' 小时';if(s>=3600)return Math.floor(s/3600)+' 小时 '+Math.floor(s%3600/60)+' 分';return Math.floor(s/60)+' 分钟'}
+  function kpi(id,parts){var n=$(id);n.replaceChildren(document.createTextNode(parts[0]));if(parts[1]){var u=document.createElement('span');u.className='cg-unit';u.textContent=parts[1];n.appendChild(u)}}
+  function getJSON(url){return fetch(url,{credentials:'same-origin',cache:'no-store'}).then(function(r){if(!r.ok)throw new Error(r.status);return r.json()})}
+
+  /* ---------- 运行状态 ---------- */
+  function tone(code){return TONE[code]||(code?'warn':'idle')}
+  function renderStatus(s){
+    $('cg-state').setAttribute('data-tone',tone(s.code));
+    set('cg-message',s.message||'尚无检测结果');
+    set('cg-checked',(s.checked_at?'检测于 '+s.checked_at:'尚未检测')+' · 每 20 秒自动检测'+(s.last_login_at?' · 上次自动登录 '+s.last_login_at:''));
+    set('cg-wan',s.wan_ip||'未获取');
+    set('cg-wan-dev',s.wan_device?'接口 '+s.wan_device:' ');
+    var probeOk=s.internet_ok===true;
+    set('cg-probe',s.code==='wan_down'?'未检测':(probeOk?'正常':'不可达'),s.code==='wan_down'?'idle':(probeOk?'ok':'bad'));
+    set('cg-probe-sub',s.code==='wan_down'?' ':'域名 '+(s.dns_probe_ok?'✓':'✕')+'　IP '+(s.ip_probe_ok?'✓':'✕'));
+    set('cg-auth',s.authenticated?'已认证':(s.portal_reachable===false?'认证页不可达':'未认证'),s.authenticated?'ok':(s.code==='online'?'idle':'warn'));
+    set('cg-auth-sub',s.authenticated?'账号在线 · IP 一致':(s.code==='online'?'外网可达，状态待核实':' '));
+    set('cg-auto',s.auto_login?'已启用':'已关闭',s.auto_login?'ok':'idle');
+    set('cg-auto-sub',s.credentials_ready?'学号密码已配置':'请在下方填写学号密码');
+    var list=$('cg-history'),items=(s.history||[]).slice().reverse();list.replaceChildren();
+    set('cg-history-count',items.length?'（'+items.length+'）':'');
+    if(!items.length){var e=document.createElement('li');e.className='cg-muted';e.textContent='暂无记录';list.appendChild(e)}
+    items.forEach(function(h){
+      var li=document.createElement('li'),t=document.createElement('time'),d=document.createElement('span'),m=document.createElement('span');
+      t.className='cg-num cg-muted';t.textContent=h.time;d.className='cg-dot';d.setAttribute('data-tone',tone(h.code));m.textContent=h.message;
+      li.append(t,d,m);list.appendChild(li);
+    });
+  }
+  function updateStatus(){
+    return getJSON(API.status).then(renderStatus).catch(function(){
+      $('cg-state').setAttribute('data-tone','bad');set('cg-message','无法读取状态');set('cg-checked','请刷新页面或重新登录路由器');
+    });
+  }
+  $('cg-check').addEventListener('click',function(){
+    var b=this;b.disabled=true;b.textContent='检测中…';
+    fetch(API.check,{method:'POST',credentials:'same-origin',body:new URLSearchParams({token:TOKEN})}).catch(function(){})
+      .then(function(){return new Promise(function(r){setTimeout(r,6000)})}).then(updateStatus)
+      .then(function(){b.disabled=false;b.textContent='立即检测'});
+  });
+
+  /* ---------- 用量统计 ---------- */
+  function niceMax(v){
+    if(!(v>0))return 1;var p=Math.pow(10,Math.floor(Math.log10(v))),f=v/p;
+    return (f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*p;
+  }
+  function svgEl(tag,attrs,text){var n=document.createElementNS('http://www.w3.org/2000/svg',tag);for(var k in attrs)n.setAttribute(k,attrs[k]);if(text!==undefined)n.textContent=text;return n}
+  function chart(box,title,rows,labelOf,tickOf){
+    box.replaceChildren();
+    var head=document.createElement('div');head.className='cg-chart-head';
+    var h=document.createElement('div'),u=document.createElement('small');h.className='cg-chart-title';h.textContent=title;u.textContent=metric==='bytes'?'单位 MiB':'单位 分钟';h.appendChild(u);
+    var lg=document.createElement('div');lg.className='cg-legend';lg.innerHTML='<span><i></i>已采集</span><span><i class="cg-miss"></i>未采集</span>';
+    head.append(h,lg);box.appendChild(head);
+    var isFlow=metric==='bytes';
+    function val(r){return isFlow?r.bytes/1048576:r.minutes}
+    var known=rows.filter(function(r){return r.coverage_seconds>0});
+    var max=niceMax(Math.max.apply(null,[isFlow?1:5].concat(known.map(val))));
+    var W=Math.max(240,box.clientWidth-32),H=box.clientWidth<480?180:210,L=44,R=4,T=10,B=26,pw=W-L-R,ph=H-T-B;
+    var svg=svgEl('svg',{'class':'cg-svg',viewBox:'0 0 '+W+' '+H,width:W,height:H,role:'img','aria-label':title});
+    box.appendChild(svg);
+    for(var i=0;i<=4;i++){
+      var y=Math.round(T+ph-ph*i/4)+.5,v=max*i/4;
+      svg.appendChild(svgEl('line',{x1:L,x2:W-R,y1:y,y2:y,stroke:'rgba(136,152,170,'+(i?'.22':'.55')+')'}));
+      svg.appendChild(svgEl('text',{x:L-8,y:y+4,'text-anchor':'end'},fmt(v,v%1?1:0)));
+    }
+    var tip=document.createElement('div');tip.className='cg-tip';tip.hidden=true;box.appendChild(tip);
+    var step=pw/rows.length,bw=Math.max(2,Math.min(28,step*.62));
+    rows.forEach(function(r,i){
+      var has=r.coverage_seconds>0,x0=L+step*i,cx=x0+step/2,g=svgEl('g',{'class':'cg-col',tabindex:0});
+      g.appendChild(svgEl('rect',{'class':'cg-band',x:x0,y:T,width:step,height:ph,fill:'transparent'}));
+      if(has){
+        var hgt=Math.max(val(r)>0?2:0,val(r)/max*ph);
+        g.appendChild(svgEl('rect',{'class':'cg-bar',x:cx-bw/2,y:T+ph-hgt,width:bw,height:hgt,rx:Math.min(3,bw/4)}));
+      }else{
+        g.appendChild(svgEl('line',{x1:cx-bw/2,x2:cx+bw/2,y1:T+ph-1.5,y2:T+ph-1.5,stroke:'var(--cg-idle)','stroke-width':2,'stroke-dasharray':'3 2'}));
+      }
+      g.setAttribute('aria-label',labelOf(r)+'：'+(has?(isFlow?flowText(r.bytes):fmt(r.minutes,1)+' 分钟'):'未采集'));
+      function show(){
+        tip.innerHTML='';var b=document.createElement('b');b.textContent=labelOf(r);tip.appendChild(b);
+        tip.appendChild(document.createTextNode(has?'流量 '+flowText(r.bytes)+'\n在线 '+fmt(r.minutes,1)+' 分钟\n覆盖 '+span(r.coverage_seconds)+' · 采样 '+r.samples+' 次':'未采集或尚未建立基准'));
+        tip.hidden=false;
+        var scale=svg.getBoundingClientRect().width/W,left=svg.offsetLeft+cx*scale-tip.offsetWidth/2;
+        tip.style.left=Math.max(4,Math.min(box.clientWidth-tip.offsetWidth-4,left))+'px';
+        tip.style.top=Math.max(4,svg.offsetTop+(T+ph-(has?val(r)/max*ph:0))*scale-tip.offsetHeight-8)+'px';
+      }
+      function hide(){tip.hidden=true}
+      g.addEventListener('mouseenter',show);g.addEventListener('focus',show);g.addEventListener('mouseleave',hide);g.addEventListener('blur',hide);
+      svg.appendChild(g);
+      var tick=tickOf(r,i,rows.length);
+      if(tick)svg.appendChild(svgEl('text',{x:cx,y:H-8,'text-anchor':'middle'},tick));
+    });
+    if(!known.length)svg.appendChild(svgEl('text',{x:L+pw/2,y:T+ph/2,'text-anchor':'middle'},'等待采集增量'));
+  }
+  function dailyRows(){
+    var n=Number($('cg-range').value),map={},rows=[],end=Date.parse(stats.today+'T00:00:00Z');
+    (stats.daily||[]).forEach(function(d){map[d.date]=d});
+    for(var i=n-1;i>=0;i--){var d=new Date(end-i*86400000).toISOString().slice(0,10);rows.push(map[d]||{date:d,bytes:0,minutes:0,coverage_seconds:0,samples:0})}
+    return rows;
+  }
+  function drawCharts(){
+    if(!stats||!stats.ready)return;
+    var name=metric==='bytes'?'流量':'在线时长',days=Number($('cg-range').value);
+    chart($('cg-daily'),'每日'+name+' · 最近 '+days+' 天',dailyRows(),function(r){return r.date},function(r,i,n){
+      var every=n<=7?1:n<=30?5:15;return (n-1-i)%every===0?r.date.slice(5):''});
+    chart($('cg-hourly'),'每小时'+name+' · '+stats.date,stats.hourly||[],function(r){return stats.date+' '+r.label},function(r,i){return i%3===0?r.label.slice(0,2)+'时':''});
+  }
+  function renderStats(){
+    var s=stats;
+    if(!s||!s.ready){set('cg-collection',(s&&s.message)||'尚无采样');return}
+    var latest=s.latest||{},today=s.today_usage||{},last=s.last_sample||{};
+    kpi('cg-today-flow',today.coverage_seconds>0?flowParts(today.bytes):['—']);
+    kpi('cg-today-time',today.coverage_seconds>0?timeParts(today.minutes):['—']);
+    kpi('cg-total-flow',latest.flow_kib===undefined?['—']:flowParts(latest.flow_kib*1024));
+    kpi('cg-total-time',latest.time_minutes===undefined?['—']:timeParts(latest.time_minutes));
+    set('cg-collection','开始采集 '+s.started_time+' · 最近采样 '+(last.time||'—')+' · 路由器已运行 '+span(last.router_uptime_seconds)+' · WAN 已连接 '+span(last.wan_uptime_seconds));
+    $('cg-error').hidden=!s.error;$('cg-error').textContent=s.error||'';
+    drawCharts();
+    var q='约每分钟采样一次，小时汇总保留 90 天，原始读数保留 30 天。今日有效采集 '+span(today.coverage_seconds)+'；计数重置 '+(s.resets||0)+' 次；超过 3 分钟的采集间断 '+(s.gaps||0)+' 次。';
+    if(s.unassigned_bytes||s.unassigned_minutes)q+='长间断内的增量无法归入具体小时：'+flowText(s.unassigned_bytes)+' / '+fmt(s.unassigned_minutes,1)+' 分钟。';
+    set('cg-quality',q);
+    $('cg-export-hourly').href=API.exp+'?grain=hourly&date='+encodeURIComponent(s.date);
+    $('cg-export-daily').href=API.exp+'?grain=daily&date='+encodeURIComponent(s.date);
+    var tb=$('cg-hourly-table');tb.replaceChildren();
+    (s.hourly||[]).forEach(function(r){
+      var tr=document.createElement('tr'),has=r.coverage_seconds>0;
+      [r.label,has?fmt(r.bytes/1048576,2):'—',has?fmt(r.minutes,1):'—',has?span(r.coverage_seconds):'未采集',String(r.samples)].forEach(function(v){var td=document.createElement('td');td.className='cg-num';td.textContent=v;tr.appendChild(td)});
+      tb.appendChild(tr);
+    });
+  }
+  function updateStats(){
+    if(busy)return;busy=true;
+    getJSON(API.stats+($('cg-date').value?'?date='+encodeURIComponent($('cg-date').value):'')).then(function(s){
+      stats=s;
+      if(s.ready&&!dateInit){$('cg-date').value=s.date;$('cg-date').max=s.today;var first=(s.daily||[])[0];if(first)$('cg-date').min=first.date;dateInit=true}
+      renderStats();
+    }).catch(function(){set('cg-collection','无法读取用量统计，请刷新页面或重新登录路由器')}).finally(function(){busy=false});
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('#cg .cg-seg button'),function(b){
+    b.addEventListener('click',function(){
+      metric=b.getAttribute('data-metric');
+      Array.prototype.forEach.call(b.parentNode.children,function(x){x.setAttribute('aria-pressed',String(x===b))});
+      drawCharts();
+    });
+  });
+  $('cg-range').addEventListener('change',drawCharts);
+  $('cg-date').addEventListener('change',updateStats);
+  var resizeTimer;window.addEventListener('resize',function(){clearTimeout(resizeTimer);resizeTimer=setTimeout(drawCharts,150)});
+
+  updateStatus();updateStats();
+  setInterval(updateStatus,10000);setInterval(updateStats,60000);
+})();
+</script>
