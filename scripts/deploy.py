@@ -23,7 +23,8 @@ for path in (repo / 'root').rglob('*'):
 for path in (repo / 'luasrc').rglob('*'):
     if path.is_file():
         files[path] = '/usr/lib/lua/luci/' + path.relative_to(repo / 'luasrc').as_posix()
-config = files.pop(repo / 'root/etc/config/campus_guard')
+config = repo / 'root/etc/config/campus_guard'
+files.pop(config)
 
 archive = io.BytesIO()
 with tarfile.open(fileobj=archive, mode='w') as tf:
