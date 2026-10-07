@@ -27,20 +27,34 @@ luasrc/                  LuCI 页面（安装到 /usr/lib/lua/luci/）
   view/campus_guard/         状态与用量仪表盘
 tests/                   在路由器上运行的单元测试
 openclash/               旁路由 OpenClash 的校园域名直连/DNS 修复脚本
-scripts/deploy.py        通过 SSH 一键安装
+scripts/                 deploy.py 通过 SSH 安装；build-ipk.py 打包 ipk
 tools/                   开发时用的辅助脚本
 docs/                    设计记录与断网恢复实测
 ```
 
 ## 安装
 
-需要路由器上已有 `lua`、`luci-base`、`luci-compat` 和 `curl`（iStoreOS 默认自带）。另外，本机要能通过 SSH 密钥登录路由器。
+到 [Releases](https://github.com/wzp100/nwu-campus-guard/releases/latest) 下载 `luci-app-campus-guard_*_all.ipk`，然后任选一种方式安装：
+
+- **网页**：在 iStoreOS / OpenWrt 的「系统 → 软件包」里选择「上传软件包」，选中 ipk 安装。
+- **命令行**：把 ipk 传到路由器上，执行：
+
+  ```sh
+  opkg install luci-app-campus-guard_*_all.ipk
+  ```
+
+装好后打开 **LuCI → 服务 → 校园网守护**，填写学号、密码和登录选项（纯学号 / 电信 / 联通），保存并应用即可。服务会自动开机启动。升级时会保留已有配置（学号密码、统计目录）；卸载用 `opkg remove luci-app-campus-guard`。
+
+依赖 `lua`、`curl`、`luci-compat`、`luci-lib-jsonc`、`luci-lib-nixio`，iStoreOS 默认都已自带。
+
+### 从源码安装 / 打包
 
 ```sh
-python scripts/deploy.py root@192.168.1.1
+python scripts/deploy.py root@192.168.1.1   # 通过 SSH 直接安装当前源码
+python scripts/build-ipk.py 1.0.0           # 在 dist/ 下生成 ipk
 ```
 
-装好后打开 **LuCI → 服务 → 校园网守护**，填写学号、密码和登录选项（纯学号 / 电信 / 联通），保存并应用即可。
+推送 `v*.*.*` 格式的 tag 后，GitHub Actions 会自动打包并发布 Release。
 
 ### 统计数据目录
 

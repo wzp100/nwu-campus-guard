@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build ipk
+        run: python scripts/build-ipk.py "${GITHUB_REF_NAME}"
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.ipk \
+            --title "NWU 校园网守护 $GITHUB_REF_NAME" \
+            --notes "$(cat <<'NOTES'
+          ## 安装
+
+          下载下面的 `luci-app-campus-guard_*_all.ipk`，任选一种方式安装：
+
+          - **iStoreOS / OpenWrt 网页**：系统 → 软件包 → 上传软件包，选择 ipk 安装。
+          - **命令行**：上传到路由器后执行 `opkg install luci-app-campus-guard_*_all.ipk`。
+
+          装好后打开 **服务 → 校园网守护**，填写学号、密码和登录选项，保存并应用。升级时已有的配置（学号密码、统计目录）会保留。
+
+          依赖：`lua`、`curl`、`luci-compat`、`luci-lib-jsonc`、`luci-lib-nixio`（iStoreOS 默认自带）。
+          NOTES
+          )"
