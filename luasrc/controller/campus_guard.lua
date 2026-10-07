@@ -5,6 +5,7 @@ function index()
     entry({'admin','services','campus_guard','statistics'}, call('statistics')).leaf=true
     entry({'admin','services','campus_guard','export'}, call('export')).leaf=true
     entry({'admin','services','campus_guard','check'}, post('check')).leaf=true
+    entry({'admin','services','campus_guard','clear'}, post('clear')).leaf=true
 end
 local function valid_date(value)
     if not value or not value:match('^%d%d%d%d%-%d%d%-%d%d$') then return nil end
@@ -57,4 +58,33 @@ function check()
     luci.sys.call('/usr/bin/lua /usr/share/campus-guard/campus-guard.lua >/dev/null 2>&1 &')
     luci.http.prepare_content('application/json')
     luci.http.write('{"started":true}')
+end
+function clear()
+    local fs=require 'nixio.fs'
+    local target=luci.http.formvalue('target')
+    luci.http.prepare_content('application/json')
+    if target~='history' and target~='stats' then
+        luci.http.status(400,'Bad Request'); luci.http.write('{"ok":false}'); return
+    end
+    -- 与检测进程共用锁，避免清空的同时被正在运行的检测写回旧数据。
+    local base='/tmp/campus-guard'
+    local lock=base..'/lock'
+    fs.mkdir(base,'700')
+    if not fs.mkdir(lock,'700') then luci.http.write('{"ok":false,"busy":true}'); return end
+    fs.writefile(lock..'/pid',tostring(require('nixio').getpid()))
+    if target=='history' then
+        fs.unlink(base..'/history.json')
+    else
+        local dir=dofile('/usr/share/campus-guard/collect-metrics.lua').data_dir()
+        fs.unlink(dir..'/stats.json')
+        local names=fs.dir(dir)
+        if names then
+            for name in names do
+                if name:match('^samples%-%d%d%d%d%-%d%d%-%d%d%.jsonl$') then fs.unlink(dir..'/'..name) end
+            end
+        end
+        fs.unlink(base..'/metrics-error')
+    end
+    fs.unlink(lock..'/pid'); fs.rmdir(lock)
+    luci.http.write('{"ok":true}')
 end

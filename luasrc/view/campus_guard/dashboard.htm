@@ -4,6 +4,7 @@ local api_status=dsp.build_url('admin','services','campus_guard','status')
 local api_check=dsp.build_url('admin','services','campus_guard','check')
 local api_stats=dsp.build_url('admin','services','campus_guard','statistics')
 local api_export=dsp.build_url('admin','services','campus_guard','export')
+local api_clear=dsp.build_url('admin','services','campus_guard','clear')
 -%>
 <style>
 #cg{--cg-accent:var(--primary,#5e72e4);--cg-ok:#2dce89;--cg-warn:#fb8c00;--cg-bad:#f5365c;--cg-idle:#8898aa;--cg-line:rgba(136,152,170,.28);--cg-tile:rgba(136,152,170,.09);--cg-muted:.68}
@@ -58,6 +59,11 @@ local api_export=dsp.build_url('admin','services','campus_guard','export')
 #cg .cg-seg button[aria-pressed=true]{background:var(--cg-accent);color:#fff;opacity:1}
 #cg .cg-link{font-size:.8rem;color:var(--cg-accent);text-decoration:none;white-space:nowrap}
 #cg .cg-link:hover{text-decoration:underline}
+#cg .cg-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;margin-top:.5rem}
+#cg .cg-danger{height:28px;margin:0;padding:0 12px;font-size:.75rem;line-height:26px;color:var(--cg-bad);background:transparent;border:1px solid color-mix(in srgb,var(--cg-bad) 45%,transparent);border-radius:6px;box-shadow:none;cursor:pointer;white-space:nowrap}
+#cg .cg-danger:hover{background:color-mix(in srgb,var(--cg-bad) 8%,transparent)}
+#cg .cg-danger[data-armed]{color:#fff;background:var(--cg-bad);border-color:var(--cg-bad)}
+#cg .cg-danger:disabled{opacity:.5;cursor:default}
 
 /* 图表 */
 #cg .cg-charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:16px}
@@ -120,6 +126,7 @@ local api_export=dsp.build_url('admin','services','campus_guard','export')
       <details>
         <summary>最近状态变化 <span class="cg-muted" id="cg-history-count"></span></summary>
         <ol class="cg-history" id="cg-history"></ol>
+        <div class="cg-foot"><span class="cg-note">状态变化时记录一条，最多保留 100 条，路由器重启后清空。</span><button type="button" class="cg-danger" data-clear="history" data-label="清空记录">清空记录</button></div>
       </details>
     </div>
   </div>
@@ -155,7 +162,10 @@ local api_export=dsp.build_url('admin','services','campus_guard','export')
         <summary>所选日期的小时明细</summary>
         <div class="cg-table-wrap"><table class="cg-table"><thead><tr><th>小时</th><th>流量 (MiB)</th><th>在线时长 (分钟)</th><th>有效采集</th><th>采样次数</th></tr></thead><tbody id="cg-hourly-table"></tbody></table></div>
       </details>
-      <div class="cg-note">小时值由相邻累计读数差分，跨整点按采样间隔分摊，属于估算；虚线表示该时段未采集，不计为零。数据取自校园网账号接口，可能包含同账号的其他设备。</div>
+      <div class="cg-foot">
+        <span class="cg-note">小时值由相邻累计读数差分，跨整点按采样间隔分摊，属于估算；虚线表示该时段未采集，不计为零。数据取自校园网账号接口，可能包含同账号的其他设备。</span>
+        <button type="button" class="cg-danger" data-clear="stats" data-label="清空统计数据">清空统计数据</button>
+      </div>
     </div>
   </div>
 </div>
@@ -163,7 +173,7 @@ local api_export=dsp.build_url('admin','services','campus_guard','export')
 <script type="text/javascript">
 (function(){
   'use strict';
-  var API={status:'<%=api_status%>',check:'<%=api_check%>',stats:'<%=api_stats%>',exp:'<%=api_export%>'};
+  var API={status:'<%=api_status%>',check:'<%=api_check%>',stats:'<%=api_stats%>',exp:'<%=api_export%>',clear:'<%=api_clear%>'};
   var TOKEN='<%=token%>';
   var TONE={online:'ok',reconnected:'ok',wan_down:'bad',login_failed:'bad',internal_error:'bad'};
   var metric='bytes',stats=null,dateInit=false,busy=false;
@@ -281,7 +291,12 @@ local api_export=dsp.build_url('admin','services','campus_guard','export')
   }
   function renderStats(){
     var s=stats;
-    if(!s||!s.ready){set('cg-collection',(s&&s.message)||'尚无采样');return}
+    if(!s||!s.ready){
+      set('cg-collection',(s&&s.message)||'尚无采样');
+      ['cg-today-flow','cg-today-time','cg-total-flow','cg-total-time'].forEach(function(id){kpi(id,['—'])});
+      ['cg-daily','cg-hourly','cg-hourly-table'].forEach(function(id){$(id).replaceChildren()});
+      set('cg-quality','');$('cg-error').hidden=true;return;
+    }
     var latest=s.latest||{},today=s.today_usage||{},last=s.last_sample||{};
     kpi('cg-today-flow',today.coverage_seconds>0?flowParts(today.bytes):['—']);
     kpi('cg-today-time',today.coverage_seconds>0?timeParts(today.minutes):['—']);
@@ -315,6 +330,28 @@ local api_export=dsp.build_url('admin','services','campus_guard','export')
       metric=b.getAttribute('data-metric');
       Array.prototype.forEach.call(b.parentNode.children,function(x){x.setAttribute('aria-pressed',String(x===b))});
       drawCharts();
+    });
+  });
+  /* 清空：第一次点击进入确认态，4 秒内再次点击才执行 */
+  function clearData(target){
+    return fetch(API.clear,{method:'POST',credentials:'same-origin',body:new URLSearchParams({token:TOKEN,target:target})})
+      .then(function(r){return r.json()});
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('#cg [data-clear]'),function(b){
+    var timer,label=b.getAttribute('data-label');
+    function reset(text){clearTimeout(timer);b.removeAttribute('data-armed');b.disabled=false;b.textContent=text||label;if(text)timer=setTimeout(function(){b.textContent=label},2500)}
+    b.addEventListener('click',function(){
+      if(!b.hasAttribute('data-armed')){b.setAttribute('data-armed','');b.textContent='再次点击确认';timer=setTimeout(function(){reset()},4000);return}
+      clearTimeout(timer);b.disabled=true;b.textContent='正在清空…';
+      var target=b.getAttribute('data-clear');
+      clearData(target).then(function(r){
+        if(r.busy)return new Promise(function(ok){setTimeout(ok,2000)}).then(function(){return clearData(target)});
+        return r;
+      }).then(function(r){
+        if(!r.ok){reset(r.busy?'检测进行中，请稍后再试':'清空失败');return}
+        reset('已清空');
+        if(target==='history')updateStatus();else{stats=null;dateInit=false;updateStats()}
+      }).catch(function(){reset('清空失败')});
     });
   });
   $('cg-range').addEventListener('change',drawCharts);
